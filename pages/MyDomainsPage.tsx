@@ -2,7 +2,6 @@ import React from 'react';
 import { Domain, Page } from '../types';
 import { useDomainManager } from '../hooks/useDomainManager';
 import { ChevronRightIcon } from '../components/Icons';
-import { calculatePrice } from '../utils';
 
 type MyDomainsPageProps = {
   domainManager: ReturnType<typeof useDomainManager>;
@@ -36,7 +35,7 @@ const MyDomainsPage: React.FC<MyDomainsPageProps> = ({ domainManager, navigateTo
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-300">{domain.created || 'N/A'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-300 truncate max-w-xs">{domain.linkedSite || 'Not Set'}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-300">{calculatePrice(domain.name)} PHP</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500 dark:text-slate-300">{domain.price ? `${domain.price} PHP` : 'N/A'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                     <button 
                                         onClick={() => navigateTo('manage-domain', domain)} 

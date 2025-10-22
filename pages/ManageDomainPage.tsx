@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { Domain, Page } from '../types';
 import { useDomainManager } from '../hooks/useDomainManager';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { LoaderIcon, CheckCircleIcon, ExternalLinkIcon } from '../components/Icons';
-import { calculatePrice } from '../utils';
+import { config } from '../config';
 
 type ManageDomainPageProps = {
   domain: Domain;
@@ -13,7 +13,7 @@ type ManageDomainPageProps = {
   initialTab?: 'overview' | 'dns' | 'transfer' | 'danger';
 };
 
-type SaveStatus = 'idle' | 'saving' | 'success';
+type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
 type DnsType = 'none' | 'ip' | 'ipfs' | 'redirect';
 
 const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
@@ -29,7 +29,7 @@ const TabButton: React.FC<{ active: boolean; onClick: () => void; children: Reac
   </button>
 );
 
-const InputField: React.FC<{ label: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder?: string, error?: string }> = ({ label, value, onChange, placeholder, error }) => (
+const InputField: React.FC<{ label: string; value: string; onChange: (e: React.ChangeEvent<HTMLInputElement>) => void; placeholder?: string, error?: string, disabled?: boolean }> = ({ label, value, onChange, placeholder, error, disabled }) => (
     <div>
         <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">{label}</label>
         <input
@@ -37,7 +37,8 @@ const InputField: React.FC<{ label: string; value: string; onChange: (e: React.C
             value={value}
             onChange={onChange}
             placeholder={placeholder}
-            className={`w-full p-3 bg-slate-100 dark:bg-navy-900 rounded-lg border ${error ? 'border-red-500' : 'border-slate-300 dark:border-navy-700'} focus:ring-2 focus:ring-primary-end focus:outline-none transition-all`}
+            disabled={disabled}
+            className={`w-full p-3 bg-slate-100 dark:bg-navy-900 rounded-lg border ${error ? 'border-red-500' : 'border-slate-300 dark:border-navy-700'} focus:ring-2 focus:ring-primary-end focus:outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
         />
         {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
     </div>
@@ -50,8 +51,9 @@ const RadioOption: React.FC<{
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   label: string;
   description: string;
-}> = ({ id, name, checked, onChange, label, description }) => (
-  <label htmlFor={id} className="flex p-4 bg-slate-50 dark:bg-navy-900/50 rounded-lg border border-slate-200 dark:border-navy-700 has-[:checked]:border-primary-end has-[:checked]:ring-2 has-[:checked]:ring-primary-end/50 cursor-pointer transition-all">
+  disabled?: boolean;
+}> = ({ id, name, checked, onChange, label, description, disabled }) => (
+  <label htmlFor={id} className={`flex p-4 bg-slate-50 dark:bg-navy-900/50 rounded-lg border border-slate-200 dark:border-navy-700 has-[:checked]:border-primary-end has-[:checked]:ring-2 has-[:checked]:ring-primary-end/50 transition-all ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}>
     <input
       id={id}
       name={name}
@@ -59,7 +61,8 @@ const RadioOption: React.FC<{
       value={id}
       checked={checked}
       onChange={onChange}
-      className="h-4 w-4 mt-1 text-primary-end bg-slate-200 dark:bg-navy-800 border-slate-400 dark:border-navy-600 focus:ring-primary-end"
+      disabled={disabled}
+      className="h-4 w-4 mt-1 text-primary-end bg-slate-200 dark:bg-navy-800 border-slate-400 dark:border-navy-600 focus:ring-primary-end disabled:cursor-not-allowed"
     />
     <div className="ml-3 text-sm">
       <span className="font-medium text-slate-900 dark:text-white">{label}</span>
@@ -71,11 +74,13 @@ const RadioOption: React.FC<{
 
 const ManageDomainPage: React.FC<ManageDomainPageProps> = ({ domain, domainManager, navigateTo, initialTab = 'overview' }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'dns' | 'transfer' | 'danger'>(initialTab);
+  const isApiOffline = domainManager.apiStatus === 'offline';
   
   // DNS State
   const [selectedDnsType, setSelectedDnsType] = useState<DnsType>('none');
   const [dns, setDns] = useState(domain.dns || { ip: '', ipfs: '', redirect: '' });
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Transfer State
   const [transferAddress, setTransferAddress] = useState('');
@@ -115,6 +120,7 @@ const ManageDomainPage: React.FC<ManageDomainPageProps> = ({ domain, domainManag
 
   const handleSaveDns = async () => {
     setSaveStatus('saving');
+    setSaveError(null);
 
     const finalDns: Partial<Domain['dns']> = {};
 
@@ -133,8 +139,13 @@ const ManageDomainPage: React.FC<ManageDomainPageProps> = ({ domain, domainManag
             break;
     }
 
-    await domainManager.updateDomain(domain.name, finalDns);
-    setSaveStatus('success');
+    const result = await domainManager.updateDomain(domain.name, finalDns);
+    if (result.success) {
+        setSaveStatus('success');
+    } else {
+        setSaveStatus('error');
+        setSaveError(result.error || 'An unexpected error occurred.');
+    }
   };
   
   const handleInitiateTransfer = () => {
@@ -159,10 +170,10 @@ const ManageDomainPage: React.FC<ManageDomainPageProps> = ({ domain, domainManag
     navigateTo('my-domains');
   };
 
-  const purchasePrice = parseFloat(calculatePrice(domain.name));
+  const purchasePrice = parseFloat(domain.price || '0');
   const refundAmount = (purchasePrice * 0.5).toFixed(2);
 
-  const dnsInputVariants = {
+  const dnsInputVariants: Variants = {
     hidden: { opacity: 0, y: -10, height: 0 },
     visible: { opacity: 1, y: 0, height: 'auto', transition: { duration: 0.3 } },
     exit: { opacity: 0, y: -10, height: 0, transition: { duration: 0.2 } },
@@ -206,7 +217,7 @@ const ManageDomainPage: React.FC<ManageDomainPageProps> = ({ domain, domainManag
               <div className="flex justify-between items-center">
                 <span className="text-slate-500 dark:text-slate-400">Registration TX</span>
                 <a
-                  href={`https://explorer.phpcoin.net/tx/${domain.transactionId}`}
+                  href={`${config.explorerUrl}${domain.transactionId}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center space-x-2 font-mono text-sm text-primary-end hover:underline"
@@ -226,27 +237,27 @@ const ManageDomainPage: React.FC<ManageDomainPageProps> = ({ domain, domainManag
                 Choose one of the following options to point your domain. Only one record can be active at a time.
             </p>
             <div className="space-y-4">
-                <RadioOption id="none" name="dns-type" checked={selectedDnsType === 'none'} onChange={(e) => setSelectedDnsType(e.target.value as DnsType)} label="None (Disabled)" description="No DNS record will be active." />
-                <RadioOption id="ip" name="dns-type" checked={selectedDnsType === 'ip'} onChange={(e) => setSelectedDnsType(e.target.value as DnsType)} label="IP Address (A Record)" description="Point to a server's IPv4 address." />
-                <RadioOption id="ipfs" name="dns-type" checked={selectedDnsType === 'ipfs'} onChange={(e) => setSelectedDnsType(e.target.value as DnsType)} label="IPFS Content ID (CID)" description="Point to content on the InterPlanetary File System." />
-                <RadioOption id="redirect" name="dns-type" checked={selectedDnsType === 'redirect'} onChange={(e) => setSelectedDnsType(e.target.value as DnsType)} label="Redirect URL" description="Forward visitors to another website." />
+                <RadioOption id="none" name="dns-type" checked={selectedDnsType === 'none'} onChange={(e) => setSelectedDnsType(e.target.value as DnsType)} label="None (Disabled)" description="No DNS record will be active." disabled={isApiOffline} />
+                <RadioOption id="ip" name="dns-type" checked={selectedDnsType === 'ip'} onChange={(e) => setSelectedDnsType(e.target.value as DnsType)} label="IP Address (A Record)" description="Point to a server's IPv4 address." disabled={isApiOffline} />
+                <RadioOption id="ipfs" name="dns-type" checked={selectedDnsType === 'ipfs'} onChange={(e) => setSelectedDnsType(e.target.value as DnsType)} label="IPFS Content ID (CID)" description="Point to content on the InterPlanetary File System." disabled={isApiOffline} />
+                <RadioOption id="redirect" name="dns-type" checked={selectedDnsType === 'redirect'} onChange={(e) => setSelectedDnsType(e.target.value as DnsType)} label="Redirect URL" description="Forward visitors to another website." disabled={isApiOffline} />
             </div>
 
             <div className="overflow-hidden">
                 <AnimatePresence mode="wait">
                     {selectedDnsType === 'ip' && (
                         <motion.div key="ip" variants={dnsInputVariants} initial="hidden" animate="visible" exit="exit">
-                            <InputField label="IP Address (A Record)" value={dns.ip || ''} onChange={(e) => setDns({...dns, ip: e.target.value})} placeholder="e.g., 192.168.1.1" />
+                            <InputField label="IP Address (A Record)" value={dns.ip || ''} onChange={(e) => setDns({...dns, ip: e.target.value})} placeholder="e.g., 192.168.1.1" disabled={isApiOffline} />
                         </motion.div>
                     )}
                     {selectedDnsType === 'ipfs' && (
                         <motion.div key="ipfs" variants={dnsInputVariants} initial="hidden" animate="visible" exit="exit">
-                            <InputField label="IPFS Content ID (CID)" value={dns.ipfs || ''} onChange={(e) => setDns({...dns, ipfs: e.target.value})} placeholder="e.g., Qm..." />
+                            <InputField label="IPFS Content ID (CID)" value={dns.ipfs || ''} onChange={(e) => setDns({...dns, ipfs: e.target.value})} placeholder="e.g., Qm..." disabled={isApiOffline} />
                         </motion.div>
                     )}
                     {selectedDnsType === 'redirect' && (
                         <motion.div key="redirect" variants={dnsInputVariants} initial="hidden" animate="visible" exit="exit">
-                             <InputField label="Redirect URL" value={dns.redirect || ''} onChange={(e) => setDns({...dns, redirect: e.target.value})} placeholder="e.g., https://my-other-site.com" />
+                             <InputField label="Redirect URL" value={dns.redirect || ''} onChange={(e) => setDns({...dns, redirect: e.target.value})} placeholder="e.g., https://my-other-site.com" disabled={isApiOffline} />
                         </motion.div>
                     )}
                 </AnimatePresence>
@@ -255,7 +266,7 @@ const ManageDomainPage: React.FC<ManageDomainPageProps> = ({ domain, domainManag
             <div className="flex items-center space-x-4">
                 <button 
                     onClick={handleSaveDns} 
-                    disabled={saveStatus === 'saving'}
+                    disabled={saveStatus === 'saving' || isApiOffline}
                     className="flex items-center justify-center bg-gradient-to-r from-primary-start to-primary-end text-white px-6 py-2 rounded-full font-semibold hover:shadow-glow-primary transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                 {saveStatus === 'saving' ? (
@@ -293,8 +304,9 @@ const ManageDomainPage: React.FC<ManageDomainPageProps> = ({ domain, domainManag
                 }}
                 placeholder="0x..." 
                 error={transferError}
+                disabled={isApiOffline}
             />
-            <button onClick={handleInitiateTransfer} className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-full font-semibold transition-colors">
+            <button onClick={handleInitiateTransfer} disabled={isApiOffline} className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-full font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               Transfer Ownership
             </button>
           </div>
@@ -313,7 +325,7 @@ const ManageDomainPage: React.FC<ManageDomainPageProps> = ({ domain, domainManag
                     <span className="font-mono text-green-400">{refundAmount} PHP</span>
                 </div>
             </div>
-            <button onClick={() => setIsUnregisterModalOpen(true)} className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-full font-semibold transition-colors">
+            <button onClick={() => setIsUnregisterModalOpen(true)} disabled={isApiOffline} className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-full font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               Unregister {domain.name}
             </button>
           </div>

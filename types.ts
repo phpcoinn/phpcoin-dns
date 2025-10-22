@@ -11,6 +11,7 @@ export type Domain = {
   created: string | null;
   status: DomainStatus;
   transactionId?: string;
+  price?: string;
   linkedSite?: string | null;
   dns?: {
     ip?: string;
@@ -19,4 +20,9 @@ export type Domain = {
   };
 };
 
-export type Page = 'home' | 'my-domains' | 'manage-domain' | 'explorer';
+export type GlobalStats = {
+  totalDomains: number;
+  totalFunds: number;
+};
+
+export type Page = 'home' | 'my-domains' | 'manage-domain' | 'explorer' | 'how-it-works';

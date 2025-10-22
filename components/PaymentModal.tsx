@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 // FIX: Add `Variants` to framer-motion import to fix type error.
 import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { LoaderIcon, CheckCircleIcon, XCircleIcon, XIcon } from './Icons';
+import { Domain } from '../types';
 
 type PaymentStatus = 'idle' | 'processing' | 'success' | 'error';
 
 type PaymentModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  domainName: string;
-  price: string;
+  domain: Domain;
   onConfirm: () => Promise<{ success: boolean; error?: string }>;
   onSuccess: () => void;
 };
@@ -26,7 +26,7 @@ const modalVariants: Variants = {
   exit: { y: "-50%", x: "-50%", opacity: 0, scale: 0.95, transition: { duration: 0.2, ease: 'easeIn' } },
 };
 
-const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, domainName, price, onConfirm, onSuccess }) => {
+const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, domain, onConfirm, onSuccess }) => {
   const [status, setStatus] = useState<PaymentStatus>('idle');
   const [error, setError] = useState<string | null>(null);
 
@@ -66,7 +66,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, domainName
             <CheckCircleIcon className="w-16 h-16 mx-auto text-green-400" />
             <h3 className="text-2xl font-bold mt-4">Payment Successful!</h3>
             <p className="text-slate-600 dark:text-slate-400 mt-2">
-              Congratulations! <span className="font-bold text-slate-900 dark:text-white">{domainName}</span> is now yours.
+              Congratulations! <span className="font-bold text-slate-900 dark:text-white">{domain.name}</span> is now yours.
             </p>
             <button
               onClick={onSuccess}
@@ -100,11 +100,11 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, domainName
             <div className="mt-6 space-y-4">
               <div className="flex justify-between items-center bg-slate-100 dark:bg-navy-900 p-4 rounded-lg">
                 <span className="text-slate-500 dark:text-slate-400">Domain:</span>
-                <span className="font-mono font-bold text-slate-900 dark:text-white">{domainName}</span>
+                <span className="font-mono font-bold text-slate-900 dark:text-white">{domain.name}</span>
               </div>
               <div className="flex justify-between items-center bg-slate-100 dark:bg-navy-900 p-4 rounded-lg">
                 <span className="text-slate-500 dark:text-slate-400">Price:</span>
-                <span className="font-bold text-lg text-primary-end">{price} PHP</span>
+                <span className="font-bold text-lg text-primary-end">{domain.price ? `${domain.price} PHP` : 'N/A'}</span>
               </div>
             </div>
             <p className="text-xs text-slate-500 mt-4 text-center">A transaction fee will also be applied by the network.</p>

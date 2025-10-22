@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
-// FIX: Add `Transition` to framer-motion import to fix type error.
-import { AnimatePresence, motion, Transition } from 'framer-motion';
+// FIX: Add `Transition` and `Variants` to framer-motion import to fix type error.
+import { AnimatePresence, motion, Transition, Variants } from 'framer-motion';
 
 import { Page, Domain } from './types';
 import Header from './components/Header';
@@ -8,12 +8,15 @@ import HomePage from './pages/HomePage';
 import MyDomainsPage from './pages/MyDomainsPage';
 import ManageDomainPage from './pages/ManageDomainPage';
 import ExplorerPage from './pages/ExplorerPage';
+import HowItWorksPage from './pages/HowItWorksPage';
+import LoginModal from './components/LoginModal';
+import ApiOfflineBanner from './components/ApiOfflineBanner';
 
 import { useTheme } from './hooks/useTheme';
 import { useWallet } from './hooks/useWallet';
 import { useDomainManager } from './hooks/useDomainManager';
 
-const pageVariants = {
+const pageVariants: Variants = {
   initial: { opacity: 0, y: 20 },
   in: { opacity: 1, y: 0 },
   out: { opacity: 0, y: -20 },
@@ -34,6 +37,8 @@ function App() {
   const [currentPage, setCurrentPage] = useState<Page>('home');
   const [selectedDomain, setSelectedDomain] = useState<Domain | null>(null);
   const [manageDomainTab, setManageDomainTab] = useState<'overview' | 'dns' | 'transfer' | 'danger'>('overview');
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
 
   const navigateTo = useCallback((page: Page, domain?: Domain, options?: { tab?: 'overview' | 'dns' | 'transfer' | 'danger' }) => {
     if (page === 'manage-domain' && domain) {
@@ -61,18 +66,24 @@ function App() {
     }
   }, [domainManager.domains, currentPage, wallet.address, navigateTo, selectedDomain]);
 
+  const handleLoginSuccess = () => {
+    setIsLoginModalOpen(false);
+  };
+
   const renderPage = () => {
     switch (currentPage) {
       case 'home':
-        return <HomePage domainManager={domainManager} navigateTo={navigateTo} wallet={wallet} />;
+        return <HomePage domainManager={domainManager} navigateTo={navigateTo} onLoginRequest={() => setIsLoginModalOpen(true)} />;
       case 'my-domains':
         return <MyDomainsPage domainManager={domainManager} navigateTo={navigateTo} />;
       case 'manage-domain':
-        return selectedDomain ? <ManageDomainPage domain={selectedDomain} domainManager={domainManager} navigateTo={navigateTo} initialTab={manageDomainTab} /> : <HomePage domainManager={domainManager} navigateTo={navigateTo} wallet={wallet} />;
+        return selectedDomain ? <ManageDomainPage domain={selectedDomain} domainManager={domainManager} navigateTo={navigateTo} initialTab={manageDomainTab} /> : <HomePage domainManager={domainManager} navigateTo={navigateTo} onLoginRequest={() => setIsLoginModalOpen(true)} />;
       case 'explorer':
         return <ExplorerPage domainManager={domainManager} />;
+      case 'how-it-works':
+        return <HowItWorksPage />;
       default:
-        return <HomePage domainManager={domainManager} navigateTo={navigateTo} wallet={wallet} />;
+        return <HomePage domainManager={domainManager} navigateTo={navigateTo} onLoginRequest={() => setIsLoginModalOpen(true)} />;
     }
   };
 
@@ -80,6 +91,7 @@ function App() {
     <div className={`${theme} font-sans`}>
       <div className="bg-white dark:bg-navy-900 text-slate-800 dark:text-slate-200 min-h-screen transition-colors duration-300">
         
+        <ApiOfflineBanner isOffline={domainManager.apiStatus === 'offline'} />
         
         <Header 
           theme={theme}
@@ -87,6 +99,7 @@ function App() {
           wallet={wallet}
           navigateTo={navigateTo}
           currentPage={currentPage}
+          onLoginRequest={() => setIsLoginModalOpen(true)}
         />
         
         <main className="container mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-12">
@@ -103,6 +116,13 @@ function App() {
             </motion.div>
           </AnimatePresence>
         </main>
+
+        <LoginModal 
+          isOpen={isLoginModalOpen}
+          onClose={() => setIsLoginModalOpen(false)}
+          onLogin={wallet.connectWallet}
+          onSuccess={handleLoginSuccess}
+        />
       </div>
     </div>
   );

@@ -67,7 +67,8 @@ const DomainSettingsModal: React.FC<DomainSettingsModalProps> = ({ isOpen, onClo
   return (
     <AnimatePresence>
       {isOpen && (
-        <div
+        // FIX: Changed div to motion.div to apply animation props.
+        <motion.div
           className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
           variants={backdropVariants}
           initial="hidden"
@@ -75,7 +76,8 @@ const DomainSettingsModal: React.FC<DomainSettingsModalProps> = ({ isOpen, onClo
           exit="hidden"
           onClick={handleClose}
         >
-          <div
+          {/* FIX: Changed div to motion.div to apply animation props. */}
+          <motion.div
             className="fixed top-1/2 left-1/2 w-full max-w-lg p-8 bg-white dark:bg-navy-800 rounded-2xl border border-slate-200 dark:border-navy-700 shadow-2xl"
             variants={modalVariants}
             initial="hidden"
@@ -126,8 +128,8 @@ const DomainSettingsModal: React.FC<DomainSettingsModalProps> = ({ isOpen, onClo
                 ) : 'Save Changes'}
                 </button>
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
       )}
     </AnimatePresence>
   );

@@ -1,8 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
-import { Domain, DomainStatus } from '../types';
+import { Domain, DomainStatus, GlobalStats } from '../types';
 import { MOCK_DOMAINS } from '../constants';
+import { getGlobalStatsAPI, searchDomainAPI, getTrendingDomainsAPI, registerDomainAPI, unregisterDomainAPI, updateDomainAPI, transferDomainAPI } from '../utils/api';
 
 const LOCAL_STORAGE_KEY = 'phpcoin_domains';
+const NETWORK_ERROR_MESSAGE = 'Network error. Could not connect to the server.';
 
 // Utility to create a full Domain object from the mock data
 const createFullDomain = (name: string): Domain => {
@@ -37,6 +39,12 @@ export const useDomainManager = (walletAddress: string | null) => {
         });
         return initialDomains;
     });
+    
+    const [stats, setStats] = useState<GlobalStats>({ totalDomains: 0, totalFunds: 0 });
+    const [trendingDomains, setTrendingDomains] = useState<string[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [apiStatus, setApiStatus] = useState<'online' | 'offline' | 'checking'>('checking');
+
 
     useEffect(() => {
         try {
@@ -46,65 +54,121 @@ export const useDomainManager = (walletAddress: string | null) => {
         }
     }, [domains]);
 
-    const searchDomain = useCallback(async (name: string): Promise<Domain> => {
-        return new Promise(resolve => {
-            setTimeout(() => {
-                const normalizedName = name.toLowerCase();
-                if (domains[normalizedName]) {
-                    resolve(domains[normalizedName]);
+    useEffect(() => {
+        const fetchInitialData = async () => {
+            setIsLoading(true);
+            setApiStatus('checking');
+
+            const statsResponse = await getGlobalStatsAPI();
+
+            if (statsResponse.success && statsResponse.data) {
+                setStats(statsResponse.data);
+                setApiStatus('online');
+
+                const trendingResponse = await getTrendingDomainsAPI();
+                if (trendingResponse.success && trendingResponse.data) {
+                    setTrendingDomains(trendingResponse.data);
                 } else {
-                    resolve({ name: normalizedName, status: DomainStatus.Available, owner: null, created: null });
+                    console.error("Failed to fetch trending domains:", trendingResponse.error);
+                    setTrendingDomains([]);
                 }
-            }, 500); // Simulate network delay
-        });
-    }, [domains]);
+
+            } else {
+                console.error("Failed to fetch global stats:", statsResponse.error);
+                if (statsResponse.error === NETWORK_ERROR_MESSAGE) {
+                    setApiStatus('offline');
+                }
+                
+                // Fallback to local mock data calculation on API failure
+                // FIX: Explicitly type `allDomains` as `Domain[]` to resolve type inference issues with `Object.values`, which was causing `d.status` and `domain.name` to be inaccessible.
+                const allDomains: Domain[] = Object.values(domains);
+                const registeredDomains = allDomains.filter(d => d.status === DomainStatus.Taken);
+                setStats({
+                    totalDomains: registeredDomains.length,
+                    totalFunds: registeredDomains.reduce((sum, domain) => sum + parseFloat(domain.price || '0'), 0)
+                });
+                 setTrendingDomains([]);
+            }
+            
+            setIsLoading(false);
+        };
+        fetchInitialData();
+    }, []);
+
+    const searchDomain = useCallback(async (name: string): Promise<Domain> => {
+        if (apiStatus === 'offline') {
+             return { name, status: DomainStatus.Taken, owner: null, created: null, price: 'N/A' };
+        }
+
+        const normalizedName = name.toLowerCase();
+        const response = await searchDomainAPI(normalizedName);
+
+        if (response.success && response.data) {
+            return response.data;
+        } else {
+            console.error("Failed to search domain:", response.error);
+            // Fallback to "Available" status on API error, consistent with original mock behavior.
+            return {
+                name: normalizedName,
+                status: DomainStatus.Available,
+                owner: null,
+                created: null,
+            };
+        }
+    }, [apiStatus]);
 
     const registerDomain = useCallback(async (name: string): Promise<{ success: boolean; error?: string }> => {
+        if (apiStatus === 'offline') {
+            return { success: false, error: "The registration service is temporarily unavailable. Please try again later." };
+        }
+
         if (!walletAddress) {
             return { success: false, error: "Please connect your wallet to register a domain." };
         }
+        
+        const response = await registerDomainAPI(name, walletAddress);
 
-        return new Promise(resolve => {
-            setTimeout(() => {
-                // Simulate a 80% success rate
-                if (Math.random() < 0.8) {
-                    const normalizedName = name.toLowerCase();
-                    const newTransactionId = `0x${[...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('')}`;
-                    setDomains(prev => ({
-                        ...prev,
-                        [normalizedName]: {
-                            name: normalizedName,
-                            owner: walletAddress,
-                            status: DomainStatus.Taken,
-                            created: new Date().toISOString().split('T')[0],
-                            transactionId: newTransactionId,
-                        }
-                    }));
-                    resolve({ success: true });
-                } else {
-                    resolve({ success: false, error: "Transaction failed due to network congestion. Please try again." });
+        if (response.success && response.data) {
+            const newTransactionId = response.data.transactionId;
+            const normalizedName = name.toLowerCase();
+            setDomains(prev => ({
+                ...prev,
+                [normalizedName]: {
+                    name: normalizedName,
+                    owner: walletAddress,
+                    status: DomainStatus.Taken,
+                    created: new Date().toISOString().split('T')[0],
+                    transactionId: newTransactionId,
                 }
-            }, 2000); // Simulate 2 second payment processing
-        });
-    }, [walletAddress]);
+            }));
+            return { success: true };
+        } else {
+            return { success: false, error: response.error || "An unknown error occurred during registration." };
+        }
+    }, [walletAddress, apiStatus]);
 
     const unregisterDomain = useCallback(async (name: string): Promise<{ success: boolean; error?: string }> => {
-        return new Promise(resolve => {
-            setTimeout(() => {
-                const normalizedName = name.toLowerCase();
-                if (domains[normalizedName] && domains[normalizedName].owner === walletAddress) {
-                    setDomains(prev => {
-                        const newDomains = { ...prev };
-                        delete newDomains[normalizedName];
-                        return newDomains;
-                    });
-                    resolve({ success: true });
-                } else {
-                    resolve({ success: false, error: "Domain not found or you are not the owner." });
-                }
-            }, 1000); // Simulate network delay
-        });
-    }, [domains, walletAddress]);
+        if (apiStatus === 'offline') {
+            return { success: false, error: "The service is temporarily unavailable. Please try again later." };
+        }
+
+        const normalizedName = name.toLowerCase();
+        if (domains[normalizedName] && domains[normalizedName].owner === walletAddress) {
+            const response = await unregisterDomainAPI(name);
+            if(response.success) {
+                setDomains(prev => {
+                    const newDomains = { ...prev };
+                    delete newDomains[normalizedName];
+                    return newDomains;
+                });
+                return { success: true };
+            } else {
+                return { success: false, error: response.error || "Failed to unregister domain." };
+            }
+        } else {
+            return { success: false, error: "Domain not found or you are not the owner." };
+        }
+    }, [domains, walletAddress, apiStatus]);
 
 
     const getOwnedDomains = useCallback((): Domain[] => {
@@ -113,39 +177,44 @@ export const useDomainManager = (walletAddress: string | null) => {
         return (Object.values(domains) as Domain[]).filter(d => d.owner === walletAddress);
     }, [domains, walletAddress]);
     
-    const updateDomain = useCallback(async (name: string, data: Partial<Domain['dns']>) => {
-        return new Promise<void>(resolve => {
-            setTimeout(() => {
-                const normalizedName = name.toLowerCase();
-                setDomains(prev => {
-                    if (prev[normalizedName]) {
-                        const updatedDomain = { ...prev[normalizedName] };
-                        updatedDomain.dns = { ...updatedDomain.dns, ...data };
-                        return { ...prev, [normalizedName]: updatedDomain };
-                    }
-                    return prev;
-                });
-                resolve();
-            }, 1500); // Simulate network delay for saving
-        });
-    }, []);
+    const updateDomain = useCallback(async (name: string, data: Partial<Domain['dns']>): Promise<{success: boolean, error?: string}> => {
+        if (apiStatus === 'offline') {
+            return { success: false, error: "The service is temporarily unavailable. Please try again later." };
+        }
 
-    const transferDomain = useCallback(async (name: string, newOwner: string) => {
-         return new Promise<void>(resolve => {
-            setTimeout(() => {
-                const normalizedName = name.toLowerCase();
-                setDomains(prev => {
-                    if (prev[normalizedName]) {
-                        const updatedDomain = { ...prev[normalizedName], owner: newOwner };
-                        return { ...prev, [normalizedName]: updatedDomain };
-                    }
-                    return prev;
-                });
-                resolve();
-            }, 2000); // Simulate network delay for transfer
-        });
-    }, []);
+        const normalizedName = name.toLowerCase();
+        const response = await updateDomainAPI(normalizedName, data);
+
+        if (response.success && response.data) {
+            setDomains(prev => ({
+                ...prev,
+                [normalizedName]: response.data!
+            }));
+            return { success: true };
+        } else {
+             return { success: false, error: response.error || "Failed to update domain." };
+        }
+    }, [apiStatus]);
+
+    const transferDomain = useCallback(async (name: string, newOwner: string): Promise<{success: boolean, error?: string}> => {
+        if (apiStatus === 'offline') {
+            return { success: false, error: "The service is temporarily unavailable. Please try again later." };
+        }
+
+        const normalizedName = name.toLowerCase();
+        const response = await transferDomainAPI(normalizedName, newOwner);
+
+        if (response.success && response.data) {
+             setDomains(prev => {
+                const updatedDomain = { ...prev[normalizedName], owner: newOwner };
+                return { ...prev, [normalizedName]: updatedDomain };
+            });
+            return { success: true };
+        } else {
+            return { success: false, error: response.error || "Failed to transfer domain." };
+        }
+    }, [apiStatus]);
 
 
-    return { domains, searchDomain, registerDomain, getOwnedDomains, updateDomain, transferDomain, unregisterDomain };
+    return { domains, stats, trendingDomains, isLoading, apiStatus, searchDomain, registerDomain, getOwnedDomains, updateDomain, transferDomain, unregisterDomain };
 };

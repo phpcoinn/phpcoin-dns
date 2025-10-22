@@ -4,15 +4,16 @@ import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { Domain, DomainStatus, Page } from '../types';
 import { useDomainManager } from '../hooks/useDomainManager';
 import { useWallet } from '../hooks/useWallet';
-import { SearchIcon, LoaderIcon, CheckCircleIcon, XCircleIcon, AlertTriangleIcon, DatabaseIcon, DollarSignIcon } from '../components/Icons';
+import { SearchIcon, LoaderIcon, CheckCircleIcon, XCircleIcon, AlertTriangleIcon, DatabaseIcon, DollarSignIcon, InfoIcon } from '../components/Icons';
 import PaymentModal from '../components/PaymentModal';
-import { calculatePrice } from '../utils';
+import DomainInfoModal from '../components/DomainInfoModal';
+import { config } from '../config';
 
 type HomePageProps = {
   domainManager: ReturnType<typeof useDomainManager>;
   // FIX: Update navigateTo prop signature to match its definition for consistency.
   navigateTo: (page: Page, domain?: Domain, options?: { tab?: 'overview' | 'dns' | 'transfer' | 'danger' }) => void;
-  wallet: ReturnType<typeof useWallet>;
+  onLoginRequest: () => void;
 };
 
 const SearchResult: React.FC<{
@@ -20,8 +21,8 @@ const SearchResult: React.FC<{
   onRegister: (name: string) => void,
   onViewDetails: (domain: Domain) => void,
   isConnected: boolean,
-  onConnectWallet: () => void,
-}> = ({ result, onRegister, onViewDetails, isConnected, onConnectWallet }) => {
+  onLoginRequest: () => void,
+}> = ({ result, onRegister, onViewDetails, isConnected, onLoginRequest }) => {
   const { name, status } = result;
 
   // FIX: Explicitly type `resultVariants` with `Variants` to resolve type incompatibility.
@@ -43,14 +44,14 @@ const SearchResult: React.FC<{
               <p><span className="font-bold">{name}</span> is available!</p>
             </div>
             <div className="mt-4 sm:mt-0 flex items-center space-x-4">
-              <span className="text-lg font-bold text-slate-900 dark:text-white">{calculatePrice(name)} PHP</span>
+              <span className="text-lg font-bold text-slate-900 dark:text-white">{result.price ? `${result.price} PHP` : '...'}</span>
               {isConnected ? (
                 <button onClick={() => onRegister(name)} className="bg-gradient-to-r from-primary-start to-primary-end text-white px-6 py-2 rounded-full font-semibold hover:shadow-glow-primary transition-shadow">
                   Register Now
                 </button>
               ) : (
-                <button onClick={onConnectWallet} className="bg-gradient-to-r from-primary-start to-primary-end text-white px-6 py-2 rounded-full font-semibold hover:shadow-glow-primary transition-shadow">
-                  Connect Wallet
+                <button onClick={onLoginRequest} className="bg-gradient-to-r from-primary-start to-primary-end text-white px-6 py-2 rounded-full font-semibold hover:shadow-glow-primary transition-shadow">
+                  Login to Register
                 </button>
               )}
             </div>
@@ -63,8 +64,9 @@ const SearchResult: React.FC<{
               <XCircleIcon className="w-6 h-6" />
               <p><span className="font-bold">{name}</span> is taken.</p>
             </div>
-             <button onClick={() => onViewDetails(result)} className="mt-4 sm:mt-0 bg-slate-200 dark:bg-navy-700 text-slate-800 dark:text-white px-6 py-2 rounded-full font-semibold hover:bg-slate-300 dark:hover:bg-navy-600 transition-colors">
-              View Details
+             <button onClick={() => onViewDetails(result)} className="mt-4 sm:mt-0 inline-flex items-center space-x-2 bg-slate-200 dark:bg-navy-700 text-slate-800 dark:text-white px-6 py-2 rounded-full font-semibold hover:bg-slate-300 dark:hover:bg-navy-600 transition-colors">
+                <InfoIcon className="w-5 h-5" />
+                <span>View Info</span>
             </button>
           </div>
         );
@@ -99,25 +101,26 @@ const SearchResult: React.FC<{
 };
 
 
-const HomePage: React.FC<HomePageProps> = ({ domainManager, navigateTo, wallet }) => {
+const HomePage: React.FC<HomePageProps> = ({ domainManager, navigateTo, onLoginRequest }) => {
   const [query, setQuery] = useState('');
   const [searchResult, setSearchResult] = useState<Domain | null>(null);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
-  const [domainToRegister, setDomainToRegister] = useState<string | null>(null);
+  const [domainToRegister, setDomainToRegister] = useState<Domain | null>(null);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const [domainToView, setDomainToView] = useState<string | null>(null);
+  const wallet = useWallet();
 
-  // FIX: Explicitly type `allDomains` as `Domain[]` to prevent items from being inferred as `unknown`.
-  const allDomains: Domain[] = Object.values(domainManager.domains);
-  const registeredDomains = allDomains.filter(d => d.status === DomainStatus.Taken);
-  const totalRegistered = registeredDomains.length;
-  const totalFunds = registeredDomains.reduce((sum, domain) => sum + parseFloat(calculatePrice(domain.name)), 0);
+  const isApiOffline = domainManager.apiStatus === 'offline';
 
   const handleSearch = async (e: FormEvent) => {
     e.preventDefault();
-    if (!query.trim()) return;
+    if (!query.trim() || isApiOffline) return;
 
     let domainName = query.trim().toLowerCase();
-    if (!domainName.endsWith('.dap.ad') && !domainName.endsWith('.phpcoin.net') && !domainName.endsWith('.phpcoin')) {
-      domainName = `${domainName}.phpcoin`;
+
+    // If user enters a name without a dot, assume they want the default extension.
+    if (!domainName.includes('.')) {
+        domainName = `${domainName}${config.defaultDomainExtension}`;
     }
 
     setSearchResult({ name: domainName, status: DomainStatus.Searching, owner: null, created: null });
@@ -126,15 +129,17 @@ const HomePage: React.FC<HomePageProps> = ({ domainManager, navigateTo, wallet }
   };
   
   const handleInitiateRegistration = (name: string) => {
-    setDomainToRegister(name);
-    setIsPaymentModalOpen(true);
+    if (searchResult && searchResult.name === name) {
+        setDomainToRegister(searchResult);
+        setIsPaymentModalOpen(true);
+    }
   };
   
   const handleConfirmRegistration = async () => {
     if (!domainToRegister) {
       return { success: false, error: 'Domain name is missing.' };
     }
-    return await domainManager.registerDomain(domainToRegister);
+    return await domainManager.registerDomain(domainToRegister.name);
   };
 
   const handleRegistrationSuccess = () => {
@@ -144,7 +149,8 @@ const HomePage: React.FC<HomePageProps> = ({ domainManager, navigateTo, wallet }
   };
   
   const handleViewDetails = (domain: Domain) => {
-    navigateTo('manage-domain', domain);
+    setDomainToView(domain.name);
+    setIsInfoModalOpen(true);
   };
 
   return (
@@ -177,7 +183,9 @@ const HomePage: React.FC<HomePageProps> = ({ domainManager, navigateTo, wallet }
           </div>
           <div>
             <p className="text-sm text-slate-500 dark:text-slate-400">Total Domains Registered</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white">{totalRegistered.toLocaleString()}</p>
+            <p className={`text-2xl font-bold ${isApiOffline ? 'text-slate-500' : 'text-slate-900 dark:text-white'}`}>
+                {isApiOffline ? 'Offline' : domainManager.stats.totalDomains.toLocaleString()}
+            </p>
           </div>
         </div>
         <div className="bg-white dark:bg-navy-800/50 rounded-2xl border border-slate-200 dark:border-navy-700 p-6 flex items-center space-x-4">
@@ -186,7 +194,9 @@ const HomePage: React.FC<HomePageProps> = ({ domainManager, navigateTo, wallet }
           </div>
           <div>
             <p className="text-sm text-slate-500 dark:text-slate-400">Total Funds Collected</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white">{totalFunds.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PHP</p>
+             <p className={`text-2xl font-bold ${isApiOffline ? 'text-slate-500' : 'text-slate-900 dark:text-white'}`}>
+                {isApiOffline ? 'Offline' : `${domainManager.stats.totalFunds.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} PHP`}
+            </p>
           </div>
         </div>
       </motion.div>
@@ -202,10 +212,11 @@ const HomePage: React.FC<HomePageProps> = ({ domainManager, navigateTo, wallet }
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Enter domain name (e.g., 'my-awesome-site')"
-            className="w-full pl-6 pr-32 py-4 text-lg bg-white dark:bg-navy-800/80 rounded-full border border-slate-300 dark:border-navy-700 focus:ring-2 focus:ring-primary-end focus:outline-none transition-all"
+            placeholder={isApiOffline ? "Service is currently unavailable" : `e.g., 'my-site' or 'site${config.defaultDomainExtension}'`}
+            disabled={isApiOffline}
+            className="w-full pl-6 pr-32 py-4 text-lg bg-white dark:bg-navy-800/80 rounded-full border border-slate-300 dark:border-navy-700 focus:ring-2 focus:ring-primary-end focus:outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           />
-          <button type="submit" className="absolute inset-y-0 right-2 my-2 flex items-center space-x-2 bg-gradient-to-r from-primary-start to-primary-end text-white px-6 rounded-full font-semibold hover:shadow-glow-primary transition-shadow">
+          <button type="submit" disabled={isApiOffline} className="absolute inset-y-0 right-2 my-2 flex items-center space-x-2 bg-gradient-to-r from-primary-start to-primary-end text-white px-6 rounded-full font-semibold hover:shadow-glow-primary transition-shadow disabled:opacity-50 disabled:cursor-not-allowed">
             <SearchIcon className="w-5 h-5" />
             <span>Search</span>
           </button>
@@ -213,19 +224,24 @@ const HomePage: React.FC<HomePageProps> = ({ domainManager, navigateTo, wallet }
       </motion.div>
       
       <div className="w-full max-w-2xl">
-        {searchResult && <SearchResult result={searchResult} onRegister={handleInitiateRegistration} onViewDetails={handleViewDetails} isConnected={wallet.isConnected} onConnectWallet={wallet.connectWallet} />}
+        {searchResult && <SearchResult result={searchResult} onRegister={handleInitiateRegistration} onViewDetails={handleViewDetails} isConnected={wallet.isConnected} onLoginRequest={onLoginRequest} />}
       </div>
       
       {domainToRegister && (
         <PaymentModal
           isOpen={isPaymentModalOpen}
           onClose={() => setIsPaymentModalOpen(false)}
-          domainName={domainToRegister}
-          price={calculatePrice(domainToRegister)}
+          domain={domainToRegister}
           onConfirm={handleConfirmRegistration}
           onSuccess={handleRegistrationSuccess}
         />
       )}
+
+      <DomainInfoModal
+        isOpen={isInfoModalOpen}
+        onClose={() => setIsInfoModalOpen(false)}
+        domainName={domainToView}
+      />
 
     </div>
   );

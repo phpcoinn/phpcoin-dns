@@ -9,6 +9,7 @@ type HeaderProps = {
   wallet: ReturnType<typeof useWallet>;
   navigateTo: (page: Page) => void;
   currentPage: Page;
+  onLoginRequest: () => void;
 };
 
 const NavLink: React.FC<{
@@ -28,8 +29,8 @@ const NavLink: React.FC<{
   </button>
 );
 
-const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, wallet, navigateTo, currentPage }) => {
-  const { isConnected, address, balance, connectWallet, disconnectWallet } = wallet;
+const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, wallet, navigateTo, currentPage, onLoginRequest }) => {
+  const { isConnected, address, balance, disconnectWallet } = wallet;
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 bg-navy-800/80 backdrop-blur-lg border-b border-navy-700">
@@ -44,6 +45,7 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, wallet, navigateTo,
               <NavLink onClick={() => navigateTo('home')} isActive={currentPage === 'home'}>Search</NavLink>
               <NavLink onClick={() => navigateTo('my-domains')} isActive={currentPage === 'my-domains'}>My Domains</NavLink>
               <NavLink onClick={() => navigateTo('explorer')} isActive={currentPage === 'explorer'}>Explorer</NavLink>
+              <NavLink onClick={() => navigateTo('how-it-works')} isActive={currentPage === 'how-it-works'}>How It Works</NavLink>
             </nav>
           </div>
           <div className="flex items-center space-x-4">
@@ -73,11 +75,11 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, wallet, navigateTo,
               </div>
             ) : (
               <button
-                onClick={connectWallet}
+                onClick={onLoginRequest}
                 className="flex items-center space-x-2 bg-gradient-to-r from-primary-start to-primary-end text-white px-4 py-2 rounded-full text-sm font-semibold hover:shadow-glow-primary transition-shadow"
               >
                 <WalletIcon className="w-4 h-4" />
-                <span>Connect Wallet</span>
+                <span>Login</span>
               </button>
             )}
           </div>
