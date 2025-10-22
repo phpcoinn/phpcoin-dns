@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { Domain } from '../types';
 import { useDomainManager } from '../hooks/useDomainManager';
+import { useWallet } from '../hooks/useWallet';
 import { LoaderIcon, CheckCircleIcon, XIcon } from './Icons';
 
 // Reusable InputField component for form consistency
@@ -41,6 +42,7 @@ const modalVariants: Variants = {
 const DomainSettingsModal: React.FC<DomainSettingsModalProps> = ({ isOpen, onClose, domain, domainManager }) => {
   const [dns, setDns] = useState(domain.dns || { ip: '', ipfs: '', redirect: '' });
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const wallet = useWallet();
 
   // Reset form when modal opens with a new domain or when it's reopened
   useEffect(() => {
@@ -52,7 +54,8 @@ const DomainSettingsModal: React.FC<DomainSettingsModalProps> = ({ isOpen, onClo
 
   const handleSave = async () => {
     setSaveStatus('saving');
-    await domainManager.updateDomain(domain.name, dns);
+    // FIX: Pass the `getPrivateKey` function as the third argument to satisfy the `updateDomain` function signature.
+    await domainManager.updateDomain(domain.name, dns, wallet.getPrivateKey);
     setSaveStatus('success');
     setTimeout(() => {
       onClose();

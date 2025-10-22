@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 // FIX: Add `Variants` to framer-motion import to fix type error.
 import { motion, AnimatePresence, Variants } from 'framer-motion';
-import { LoaderIcon, CheckCircleIcon, XCircleIcon, XIcon } from './Icons';
+import { LoaderIcon, CheckCircleIcon, XCircleIcon, XIcon, ExternalLinkIcon } from './Icons';
 import { Domain } from '../types';
+import { config } from '../config';
 
 type PaymentStatus = 'idle' | 'processing' | 'success' | 'error';
 
@@ -10,7 +11,7 @@ type PaymentModalProps = {
   isOpen: boolean;
   onClose: () => void;
   domain: Domain;
-  onConfirm: () => Promise<{ success: boolean; error?: string }>;
+  onConfirm: () => Promise<{ success: boolean; error?: string; data?: { transactionId: string } }>;
   onSuccess: () => void;
 };
 
@@ -29,6 +30,7 @@ const modalVariants: Variants = {
 const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, domain, onConfirm, onSuccess }) => {
   const [status, setStatus] = useState<PaymentStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  const [transactionId, setTransactionId] = useState<string | null>(null);
 
   const handleConfirm = async () => {
     setStatus('processing');
@@ -36,6 +38,7 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, domain, on
     const result = await onConfirm();
     if (result.success) {
       setStatus('success');
+      setTransactionId(result.data?.transactionId || null);
     } else {
       setStatus('error');
       setError(result.error || 'An unknown error occurred.');
@@ -45,8 +48,16 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, domain, on
   const handleClose = () => {
     // Prevent closing while processing
     if (status === 'processing') return;
+    
+    // If the process was successful, trigger the onSuccess handler which handles navigation
+    if (status === 'success') {
+      onSuccess();
+    }
+    
+    // Reset internal state and call the parent's onClose
     setStatus('idle');
     setError(null);
+    setTransactionId(null);
     onClose();
   };
 
@@ -64,15 +75,31 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ isOpen, onClose, domain, on
         return (
           <div className="text-center">
             <CheckCircleIcon className="w-16 h-16 mx-auto text-green-400" />
-            <h3 className="text-2xl font-bold mt-4">Payment Successful!</h3>
+            <h3 className="text-2xl font-bold mt-4">Transaction Submitted!</h3>
             <p className="text-slate-600 dark:text-slate-400 mt-2">
-              Congratulations! <span className="font-bold text-slate-900 dark:text-white">{domain.name}</span> is now yours.
+              Congratulations! Your registration for <span className="font-bold text-slate-900 dark:text-white">{domain.name}</span> is being processed.
             </p>
+             {transactionId && (
+                <div className="mt-4 text-sm">
+                    <span className="text-slate-500 dark:text-slate-400">Transaction ID:</span>
+                    <a
+                        href={`${config.explorerUrl}${transactionId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-center space-x-2 font-mono text-primary-end hover:underline"
+                    >
+                        <span className="break-all">
+                            {`${transactionId.substring(0, 10)}...${transactionId.substring(transactionId.length - 8)}`}
+                        </span>
+                        <ExternalLinkIcon className="w-4 h-4" />
+                    </a>
+                </div>
+            )}
             <button
-              onClick={onSuccess}
+              onClick={handleClose}
               className="mt-6 w-full bg-gradient-to-r from-primary-start to-primary-end text-white px-6 py-3 rounded-full font-semibold hover:shadow-glow-primary transition-shadow"
             >
-              View My Domains
+              Close
             </button>
           </div>
         );

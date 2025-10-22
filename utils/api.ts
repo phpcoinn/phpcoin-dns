@@ -1,4 +1,4 @@
-import { Domain, GlobalStats } from '../types';
+import { Domain, GlobalStats, AccountInfo, TransferData } from '../types';
 import { config } from '../config';
 
 // The base URL for the PHP Coin backend API is now sourced from the global config file.
@@ -110,14 +110,25 @@ export const getTrendingDomainsAPI = (): Promise<ApiResponse<string[]>> => {
 };
 
 /**
- * Registers a new domain for a given owner.
- * @param name The domain name to register.
+ * Step 1 of domain registration: Prepare the registration and get signable data.
+ * @param name The name of the domain to register.
  * @param owner The wallet address of the new owner.
  */
-export const registerDomainAPI = (name: string, owner: string): Promise<ApiResponse<{ transactionId: string }>> => {
-    return apiRequest('', {
+export const prepareRegisterDomainAPI = (name: string, owner: string): Promise<ApiResponse<TransferData>> => {
+    return apiRequest(`q=prepareRegister`, {
         method: 'POST',
-        body: JSON.stringify({ q: 'register', name, owner }),
+        body: JSON.stringify({ name, owner }),
+    });
+};
+
+/**
+ * Step 2 of domain registration: Send the signed data to finalize the transaction.
+ * @param payload An object containing the original data, the signature, and the public key.
+ */
+export const finalizeRegisterDomainAPI = (payload: { dataToSign: string; finalSignature: string; publicKey: string; }): Promise<ApiResponse<{ transactionId: string }>> => {
+    return apiRequest(`q=finalizeRegister`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
     });
 };
 
@@ -130,36 +141,70 @@ export const getOwnedDomainsAPI = (owner: string): Promise<ApiResponse<Domain[]>
 };
 
 /**
- * Updates a domain's DNS records.
+ * Step 1 of domain update: Prepare the update and get signable data.
  * @param name The name of the domain to update.
- * @param dns The partial DNS data to update.
+ * @param dns The new DNS data.
  */
-export const updateDomainAPI = (name: string, dns: Partial<Domain['dns']>): Promise<ApiResponse<Domain>> => {
-    return apiRequest(``, {
-        method: 'PUT',
-        body: JSON.stringify({ q: 'update', name, dns }),
+export const prepareUpdateDomainAPI = (name: string, dns: Partial<Domain['dns']>): Promise<ApiResponse<TransferData>> => {
+    return apiRequest(`q=prepareUpdate`, {
+        method: 'POST',
+        body: JSON.stringify({ name, dns }),
     });
 };
 
 /**
- * Transfers a domain to a new owner.
+ * Step 2 of domain update: Send the signed data to finalize the transaction.
+ * @param payload An object containing the original data, the signature, and the public key.
+ */
+export const finalizeUpdateDomainAPI = (payload: { dataToSign: string; finalSignature: string; publicKey: string; }): Promise<ApiResponse<{ transactionId: string }>> => {
+    return apiRequest(`q=finalizeUpdate`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
+    });
+};
+
+/**
+ * Step 1 of domain transfer: Prepare the transfer and get signable data.
  * @param name The name of the domain to transfer.
  * @param newOwner The wallet address of the recipient.
  */
-export const transferDomainAPI = (name: string, newOwner: string): Promise<ApiResponse<Domain>> => {
-    return apiRequest(``, {
+export const prepareTransferDomainAPI = (name: string, newOwner: string): Promise<ApiResponse<TransferData>> => {
+    return apiRequest(`q=prepareTransfer`, {
         method: 'POST',
-        body: JSON.stringify({ q: 'transfer', name, newOwner }),
+        body: JSON.stringify({ name, newOwner }),
     });
 };
 
 /**
- * Unregisters (deletes) a domain from the system.
- * @param name The name of the domain to unregister.
+ * Step 2 of domain transfer: Send the signed data to finalize the transaction.
+ * @param payload An object containing the original data, the signature, and the public key.
  */
-export const unregisterDomainAPI = (name: string): Promise<ApiResponse<void>> => {
-    return apiRequest(``, {
-        method: 'DELETE',
-        body: JSON.stringify({ q: 'unregister', name }),
+export const finalizeTransferDomainAPI = (payload: { dataToSign: string; finalSignature: string; publicKey: string; }): Promise<ApiResponse<{ transactionId: string }>> => {
+    return apiRequest(`q=finalizeTransfer`, {
+        method: 'POST',
+        body: JSON.stringify(payload),
     });
+};
+
+
+/**
+ * Unregisters (deletes) a domain from the system.
+ * This is an authorized request that requires a signature.
+ * @param name The name of the domain to unregister.
+ * @param signature A signature of (chainId + domain name) to prove ownership.
+ * @param publicKey The public key of the owner's wallet.
+ */
+export const unregisterDomainAPI = (name: string, signature: string, publicKey: string): Promise<ApiResponse<{ transactionId: string }>> => {
+    return apiRequest(`q=unregister`, {
+        method: 'POST',
+        body: JSON.stringify({ name, signature, publicKey }),
+    });
+};
+
+/**
+ * Fetches account information for a given address, including balance and owned domains.
+ * @param address The wallet address to query.
+ */
+export const getAccountInfoAPI = (address: string): Promise<ApiResponse<AccountInfo>> => {
+    return apiRequest(`q=account&address=${encodeURIComponent(address)}`, { method: 'GET' });
 };

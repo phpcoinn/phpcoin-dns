@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { Domain, Page } from '../types';
 import { useDomainManager } from '../hooks/useDomainManager';
+import { useWallet } from '../hooks/useWallet';
 import ConfirmationModal from '../components/ConfirmationModal';
 import { LoaderIcon, CheckCircleIcon, ExternalLinkIcon } from '../components/Icons';
 import { config } from '../config';
+import phpcoinCrypto from 'phpcoin-crypto';
+import {TEST_NEW_OWNER_ADDRESS} from '../constants';
 
 type ManageDomainPageProps = {
   domain: Domain;
@@ -13,8 +16,9 @@ type ManageDomainPageProps = {
   initialTab?: 'overview' | 'dns' | 'transfer' | 'danger';
 };
 
-type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
 type DnsType = 'none' | 'ip' | 'ipfs' | 'redirect';
+type ModalStatus = 'idle' | 'confirming' | 'processing' | 'success' | 'error';
+
 
 const TabButton: React.FC<{ active: boolean; onClick: () => void; children: React.ReactNode }> = ({ active, onClick, children }) => (
   <button
@@ -75,24 +79,35 @@ const RadioOption: React.FC<{
 const ManageDomainPage: React.FC<ManageDomainPageProps> = ({ domain, domainManager, navigateTo, initialTab = 'overview' }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'dns' | 'transfer' | 'danger'>(initialTab);
   const isApiOffline = domainManager.apiStatus === 'offline';
+  const wallet = useWallet();
   
   // DNS State
   const [selectedDnsType, setSelectedDnsType] = useState<DnsType>('none');
   const [dns, setDns] = useState(domain.dns || { ip: '', ipfs: '', redirect: '' });
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const [dnsUpdateStatus, setDnsUpdateStatus] = useState<ModalStatus>('idle');
+  const [dnsUpdateError, setDnsUpdateError] = useState<string | null>(null);
+  const [isDnsUpdateModalOpen, setIsDnsUpdateModalOpen] = useState(false);
+  const [dnsUpdateTxId, setDnsUpdateTxId] = useState<string | null>(null);
 
   // Transfer State
   const [transferAddress, setTransferAddress] = useState('');
   const [transferError, setTransferError] = useState('');
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [transferApiError, setTransferApiError] = useState<string | null>(null);
+  const [transferStatus, setTransferStatus] = useState<ModalStatus>('idle');
+  const [transferTxId, setTransferTxId] = useState<string | null>(null);
+
 
   // Unregister State
   const [isUnregisterModalOpen, setIsUnregisterModalOpen] = useState(false);
+  const [unregisterStatus, setUnregisterStatus] = useState<ModalStatus>('idle');
+  const [unregisterApiError, setUnregisterApiError] = useState<string | null>(null);
+  const [unregisterTxId, setUnregisterTxId] = useState<string | null>(null);
   
   // Effect to sync local state with props to avoid stale data
   useEffect(() => {
     const currentDns = domain.dns || {};
+    setTransferAddress(TEST_NEW_OWNER_ADDRESS);
     setDns({
         ip: currentDns.ip || '',
         ipfs: currentDns.ipfs || '',
@@ -110,64 +125,122 @@ const ManageDomainPage: React.FC<ManageDomainPageProps> = ({ domain, domainManag
     }
   }, [domain.dns]);
 
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    if (saveStatus === 'success') {
-      timer = setTimeout(() => setSaveStatus('idle'), 3000);
-    }
-    return () => clearTimeout(timer);
-  }, [saveStatus]);
+  const handleInitiateDnsUpdate = () => {
+    setDnsUpdateError(null);
+    setDnsUpdateStatus('confirming');
+    setIsDnsUpdateModalOpen(true);
+  };
 
-  const handleSaveDns = async () => {
-    setSaveStatus('saving');
-    setSaveError(null);
+  const handleConfirmDnsUpdate = async () => {
+    setDnsUpdateStatus('processing');
+    setDnsUpdateError(null);
 
     const finalDns: Partial<Domain['dns']> = {};
-
     switch(selectedDnsType) {
-        case 'ip':
-            finalDns.ip = dns.ip;
-            break;
-        case 'ipfs':
-            finalDns.ipfs = dns.ipfs;
-            break;
-        case 'redirect':
-            finalDns.redirect = dns.redirect;
-            break;
-        case 'none':
-            // All fields will be undefined, clearing the record
-            break;
+        case 'ip': finalDns.ip = dns.ip; break;
+        case 'ipfs': finalDns.ipfs = dns.ipfs; break;
+        case 'redirect': finalDns.redirect = dns.redirect; break;
     }
 
-    const result = await domainManager.updateDomain(domain.name, finalDns);
-    if (result.success) {
-        setSaveStatus('success');
+    const result = await domainManager.updateDomain(domain.name, finalDns, wallet.getPrivateKey);
+    if (result.success && result.data?.transactionId) {
+        setDnsUpdateStatus('success');
+        setDnsUpdateTxId(result.data.transactionId);
     } else {
-        setSaveStatus('error');
-        setSaveError(result.error || 'An unexpected error occurred.');
+        setDnsUpdateStatus('confirming');
+        setDnsUpdateError(result.error || 'An unexpected error occurred.');
     }
   };
   
+  const closeDnsUpdateModal = () => {
+    setIsDnsUpdateModalOpen(false);
+    setTimeout(() => {
+        setDnsUpdateStatus('idle');
+        setDnsUpdateError(null);
+        setDnsUpdateTxId(null);
+    }, 300);
+  };
+  
   const handleInitiateTransfer = () => {
-    const isValidAddress = /^0x[a-fA-F0-9]{40}$/.test(transferAddress);
+    let isValidAddress;
+    try {
+      isValidAddress = phpcoinCrypto.verifyAddress(transferAddress);
+    }catch(e) {
+      isValidAddress = false;
+    }
+
     if (!transferAddress || !isValidAddress) {
-      setTransferError("Please enter a valid Ethereum address (e.g., 0x...).");
+      setTransferError("Please enter a valid PHPCoin address (e.g., Pa...).");
       return;
     }
     setTransferError('');
+    setTransferApiError(null);
+    setTransferStatus('confirming');
     setIsTransferModalOpen(true);
   };
 
   const handleConfirmTransfer = async () => {
-    await domainManager.transferDomain(domain.name, transferAddress);
+    if (transferStatus === 'processing' || transferStatus === 'success') return;
+    
+    setTransferApiError(null);
+    setTransferStatus('processing');
+    const result = await domainManager.transferDomain(domain.name, transferAddress, wallet.getPrivateKey);
+    
+    if (result.success && result.data?.transactionId) {
+      setTransferStatus('success');
+      setTransferTxId(result.data.transactionId);
+    } else {
+      setTransferApiError(result.error || 'An unexpected error occurred.');
+      setTransferStatus('confirming');
+    }
+  };
+  
+  const closeTransferModal = () => {
+    const wasSuccess = transferStatus === 'success';
     setIsTransferModalOpen(false);
-    // Navigation will be handled by the effect in App.tsx
+    setTimeout(() => {
+      setTransferStatus('idle');
+      setTransferApiError(null);
+      setTransferTxId(null);
+      if (wasSuccess) {
+        navigateTo('my-domains');
+      }
+    }, 300);
+  };
+
+  const handleInitiateUnregister = () => {
+    setUnregisterApiError(null);
+    setUnregisterStatus('confirming');
+    setIsUnregisterModalOpen(true);
   };
 
   const handleConfirmUnregister = async () => {
-    await domainManager.unregisterDomain(domain.name);
+    if (unregisterStatus === 'processing' || unregisterStatus === 'success') return;
+
+    setUnregisterApiError(null);
+    setUnregisterStatus('processing');
+    const result = await domainManager.unregisterDomain(domain.name, wallet.getPrivateKey);
+
+    if (result.success && result.data?.transactionId) {
+        setUnregisterStatus('success');
+        setUnregisterTxId(result.data.transactionId);
+    } else {
+        setUnregisterApiError(result.error || 'An unexpected error occurred.');
+        setUnregisterStatus('confirming');
+    }
+  };
+
+  const closeUnregisterModal = () => {
+    const wasSuccess = unregisterStatus === 'success';
     setIsUnregisterModalOpen(false);
-    navigateTo('my-domains');
+    setTimeout(() => {
+      setUnregisterStatus('idle');
+      setUnregisterApiError(null);
+      setUnregisterTxId(null);
+      if (wasSuccess) {
+        navigateTo('my-domains');
+      }
+    }, 300);
   };
 
   const purchasePrice = parseFloat(domain.price || '0');
@@ -177,6 +250,53 @@ const ManageDomainPage: React.FC<ManageDomainPageProps> = ({ domain, domainManag
     hidden: { opacity: 0, y: -10, height: 0 },
     visible: { opacity: 1, y: 0, height: 'auto', transition: { duration: 0.3 } },
     exit: { opacity: 0, y: -10, height: 0, transition: { duration: 0.2 } },
+  };
+
+  const renderSharedModalContent = (status: ModalStatus, type: 'transfer' | 'dns' | 'unregister') => {
+      let title = '';
+      let txId: string | null = null;
+
+      if (type === 'transfer') { title = 'Domain Transfer'; txId = transferTxId; }
+      if (type === 'dns') { title = 'DNS Update'; txId = dnsUpdateTxId; }
+      if (type === 'unregister') { title = 'Domain Unregister'; txId = unregisterTxId; }
+      
+      switch(status) {
+        case 'processing':
+            return (
+                <div className="text-center py-8">
+                    <LoaderIcon className="w-12 h-12 mx-auto text-primary-end" />
+                    <h3 className="text-xl font-bold mt-4">Processing Transaction</h3>
+                    <p className="text-slate-600 dark:text-slate-400 mt-2">Submitting your request to the blockchain...</p>
+                </div>
+            );
+        case 'success':
+            return (
+                <div className="text-center">
+                    <CheckCircleIcon className="w-16 h-16 mx-auto text-green-400" />
+                    <h3 className="text-2xl font-bold mt-4">Transaction Submitted</h3>
+                    <p className="text-slate-600 dark:text-slate-400 mt-2">
+                        Your {title} has been initiated. The action will be completed once the transaction is mined on the blockchain.
+                    </p>
+                    {txId && (
+                        <div className="mt-4 text-sm">
+                            <span className="text-slate-500 dark:text-slate-400">Transaction ID:</span>
+                            <a
+                                href={`${config.explorerUrl}${txId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center justify-center space-x-2 font-mono text-primary-end hover:underline"
+                            >
+                                <span className="break-all">
+                                    {`${txId.substring(0, 10)}...${txId.substring(txId.length - 8)}`}
+                                </span>
+                                <ExternalLinkIcon className="w-4 h-4" />
+                            </a>
+                        </div>
+                    )}
+                </div>
+            );
+        default: return null;
+      }
   };
 
   return (
@@ -265,30 +385,12 @@ const ManageDomainPage: React.FC<ManageDomainPageProps> = ({ domain, domainManag
             
             <div className="flex items-center space-x-4">
                 <button 
-                    onClick={handleSaveDns} 
-                    disabled={saveStatus === 'saving' || isApiOffline}
+                    onClick={handleInitiateDnsUpdate}
+                    disabled={isApiOffline}
                     className="flex items-center justify-center bg-gradient-to-r from-primary-start to-primary-end text-white px-6 py-2 rounded-full font-semibold hover:shadow-glow-primary transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                {saveStatus === 'saving' ? (
-                    <>
-                        <LoaderIcon className="w-5 h-5 mr-2" />
-                        Saving...
-                    </>
-                ) : 'Save Changes'}
+                    Save Changes
                 </button>
-                <AnimatePresence>
-                {saveStatus === 'success' && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 5 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 5 }}
-                        className="flex items-center space-x-2 text-green-400"
-                    >
-                        <CheckCircleIcon className="w-5 h-5" />
-                        <span>Saved successfully!</span>
-                    </motion.div>
-                )}
-                </AnimatePresence>
             </div>
           </div>
         )}
@@ -325,7 +427,7 @@ const ManageDomainPage: React.FC<ManageDomainPageProps> = ({ domain, domainManag
                     <span className="font-mono text-green-400">{refundAmount} PHP</span>
                 </div>
             </div>
-            <button onClick={() => setIsUnregisterModalOpen(true)} disabled={isApiOffline} className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-full font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+            <button onClick={handleInitiateUnregister} disabled={isApiOffline} className="bg-red-600 hover:bg-red-700 text-white px-6 py-2 rounded-full font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
               Unregister {domain.name}
             </button>
           </div>
@@ -334,28 +436,65 @@ const ManageDomainPage: React.FC<ManageDomainPageProps> = ({ domain, domainManag
 
       <ConfirmationModal
         isOpen={isTransferModalOpen}
-        onClose={() => setIsTransferModalOpen(false)}
+        onClose={closeTransferModal}
         onConfirm={handleConfirmTransfer}
-        title="Confirm Domain Transfer"
+        title={ transferStatus === 'success' || transferStatus === 'processing' ? '' : 'Confirm Domain Transfer' }
         message={
-            <div className="space-y-3">
+            transferStatus === 'processing' || transferStatus === 'success'
+            ? renderSharedModalContent(transferStatus, 'transfer')
+            : <div className="space-y-3">
                 <p>You are about to transfer ownership of <strong className="font-mono text-slate-900 dark:text-white">{domain.name}</strong>.</p>
                 <p>This action is irreversible. Please confirm the recipient's address:</p>
                 <p className="font-mono text-sm text-slate-800 dark:text-white bg-slate-100 dark:bg-navy-900 p-3 rounded-lg break-all">{transferAddress}</p>
-            </div>
+                {transferApiError && (
+                    <div className="!mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+                        {transferApiError}
+                    </div>
+                )}
+              </div>
         }
         confirmText="Confirm Transfer"
         isDestructive={true}
         confirmButtonClass="bg-red-600 hover:bg-red-700 text-white"
+        hideActions={transferStatus !== 'confirming'}
+        renderFooter={transferStatus === 'success' ? 
+            <button onClick={closeTransferModal} className="mt-6 w-full bg-slate-200 dark:bg-navy-700 text-slate-800 dark:text-white px-6 py-3 rounded-full font-semibold hover:bg-slate-300 dark:hover:bg-navy-600 transition-colors">Close</button>
+            : undefined}
+      />
+
+      <ConfirmationModal
+        isOpen={isDnsUpdateModalOpen}
+        onClose={closeDnsUpdateModal}
+        onConfirm={handleConfirmDnsUpdate}
+        title={ dnsUpdateStatus === 'success' || dnsUpdateStatus === 'processing' ? '' : 'Confirm DNS Update' }
+        message={
+            dnsUpdateStatus === 'processing' || dnsUpdateStatus === 'success'
+            ? renderSharedModalContent(dnsUpdateStatus, 'dns')
+            : <div className="space-y-3">
+                <p>You are about to update the DNS records for <strong className="font-mono text-slate-900 dark:text-white">{domain.name}</strong>. This is a blockchain transaction that requires your signature.</p>
+                 {dnsUpdateError && (
+                    <div className="!mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+                        {dnsUpdateError}
+                    </div>
+                )}
+              </div>
+        }
+        confirmText="Confirm Update"
+        hideActions={dnsUpdateStatus !== 'confirming'}
+        renderFooter={dnsUpdateStatus === 'success' ? 
+            <button onClick={closeDnsUpdateModal} className="mt-6 w-full bg-slate-200 dark:bg-navy-700 text-slate-800 dark:text-white px-6 py-3 rounded-full font-semibold hover:bg-slate-300 dark:hover:bg-navy-600 transition-colors">Close</button>
+            : undefined}
       />
 
       <ConfirmationModal
         isOpen={isUnregisterModalOpen}
-        onClose={() => setIsUnregisterModalOpen(false)}
+        onClose={closeUnregisterModal}
         onConfirm={handleConfirmUnregister}
-        title="Unregister Domain"
+        title={ unregisterStatus === 'success' || unregisterStatus === 'processing' ? '' : 'Unregister Domain' }
         message={
-            <div className="space-y-3">
+          unregisterStatus === 'processing' || unregisterStatus === 'success'
+          ? renderSharedModalContent(unregisterStatus, 'unregister')
+          : <div className="space-y-3">
                 <p>Are you sure you want to unregister <strong className="font-mono text-slate-900 dark:text-white">{domain.name}</strong>? This action is irreversible.</p>
                 <div className="!mt-4 p-3 bg-slate-100 dark:bg-navy-900 rounded-lg border border-slate-200 dark:border-navy-700">
                     <div className="flex justify-between text-sm">
@@ -367,11 +506,20 @@ const ManageDomainPage: React.FC<ManageDomainPageProps> = ({ domain, domainManag
                         <span className="font-mono font-bold text-green-400">{refundAmount} PHP</span>
                     </div>
                 </div>
+                 {unregisterApiError && (
+                    <div className="!mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400">
+                        {unregisterApiError}
+                    </div>
+                )}
             </div>
         }
         confirmText="Unregister & Claim Refund"
         isDestructive={true}
         confirmButtonClass="bg-red-600 hover:bg-red-700 text-white"
+        hideActions={unregisterStatus !== 'confirming'}
+        renderFooter={unregisterStatus === 'success' ? 
+            <button onClick={closeUnregisterModal} className="mt-6 w-full bg-slate-200 dark:bg-navy-700 text-slate-800 dark:text-white px-6 py-3 rounded-full font-semibold hover:bg-slate-300 dark:hover:bg-navy-600 transition-colors">Close</button>
+            : undefined}
       />
     </div>
   );

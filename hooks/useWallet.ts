@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import phpcoinCrypto from 'phpcoin-crypto';
 import { authAPI } from '../utils/api';
 import { config } from '../config';
@@ -17,15 +17,8 @@ export const useWallet = () => {
   });
   const [balance, setBalance] = useState<number>(0);
 
-  useEffect(() => {
-    if (address && isConnected) {
-      // In a real app, you would fetch the balance from the blockchain.
-      // Here, we simulate it.
-      setBalance(Math.random() * 10 + 1);
-    } else {
-      setBalance(0);
-    }
-  }, [address, isConnected]);
+  // The simulated balance fetching has been removed.
+  // Balance will now be fetched from the new account info endpoint in App.tsx.
 
   const connectWallet = async (privateKey: string): Promise<{ success: boolean; error?: string }> => {
     try {
@@ -70,7 +63,12 @@ export const useWallet = () => {
     window.localStorage.removeItem(ADDRESS_STORAGE_KEY);
     setIsConnected(false);
     setAddress(null);
+    setBalance(0);
   };
 
-  return { isConnected, address, balance, connectWallet, disconnectWallet };
+  const getPrivateKey = () => {
+    return window.localStorage.getItem(PRIVATE_KEY_STORAGE_KEY);
+  };
+
+  return { isConnected, address, balance, connectWallet, disconnectWallet, setBalance, getPrivateKey };
 };

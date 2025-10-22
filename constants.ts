@@ -37,3 +37,4 @@ export const MOCK_DOMAINS: { [key: string]: Omit<Domain, 'name' | 'status'> & { 
 
 
 export const TEST_PRIVATE_KEY = "Lzhp9LopCGCuLJcGJiSCXJ35FggfcYfwppDKah1BykMr2Q8F4eHEBmraxxCkDFa27mKGdJYCrveZnL1SrPBqfon3vqorcsQVvLaw9irffxPQhAM8Y3z7RgENam5FKPap6zqbKynfeWjHUrgAU6Bn9Touyf4dgYQ1Z";
+export const TEST_NEW_OWNER_ADDRESS = 'PhdjvrMRKHj6fm1jCSTteHqb5f3pPEQQZ5';

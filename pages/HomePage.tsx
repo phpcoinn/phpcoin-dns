@@ -139,7 +139,7 @@ const HomePage: React.FC<HomePageProps> = ({ domainManager, navigateTo, onLoginR
     if (!domainToRegister) {
       return { success: false, error: 'Domain name is missing.' };
     }
-    return await domainManager.registerDomain(domainToRegister.name);
+    return await domainManager.registerDomain(domainToRegister.name, wallet.getPrivateKey);
   };
 
   const handleRegistrationSuccess = () => {

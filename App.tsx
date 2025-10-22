@@ -15,6 +15,7 @@ import ApiOfflineBanner from './components/ApiOfflineBanner';
 import { useTheme } from './hooks/useTheme';
 import { useWallet } from './hooks/useWallet';
 import { useDomainManager } from './hooks/useDomainManager';
+import { getAccountInfoAPI } from './utils/api';
 
 const pageVariants: Variants = {
   initial: { opacity: 0, y: 20 },
@@ -38,6 +39,24 @@ function App() {
   const [selectedDomain, setSelectedDomain] = useState<Domain | null>(null);
   const [manageDomainTab, setManageDomainTab] = useState<'overview' | 'dns' | 'transfer' | 'danger'>('overview');
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchAccountInfo = async () => {
+      if (wallet.address) {
+        const response = await getAccountInfoAPI(wallet.address);
+        if (response.success && response.data) {
+          console.log(response.data);
+          wallet.setBalance(response.data.balance);
+          domainManager.setOwnedDomains(response.data.domains);
+        } else {
+          console.error("Failed to fetch account info:", response.error);
+          // On failure, we can reset to a known state
+          wallet.setBalance(0);
+        }
+      }
+    };
+    fetchAccountInfo();
+  }, [wallet.address, wallet.setBalance, domainManager.setOwnedDomains]);
 
 
   const navigateTo = useCallback((page: Page, domain?: Domain, options?: { tab?: 'overview' | 'dns' | 'transfer' | 'danger' }) => {

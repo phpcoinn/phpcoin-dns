@@ -26,3 +26,11 @@ export type GlobalStats = {
 };
 
 export type Page = 'home' | 'my-domains' | 'manage-domain' | 'explorer' | 'how-it-works';
+
+export type AccountInfo = {
+  address: string;
+  balance: number;
+  domains: Domain[];
+};
+
+export type TransferData = { [key: string]: any };
