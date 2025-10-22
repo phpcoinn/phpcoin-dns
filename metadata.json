@@ -1,0 +1,5 @@
+{
+  "name": "PHP Coin On-Chain Domain Manager",
+  "description": "A decentralized application frontend that allows users to search, register, and manage blockchain-based domains on the PHP Coin network.",
+  "requestFramePermissions": []
+}
