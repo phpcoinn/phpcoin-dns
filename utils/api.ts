@@ -28,12 +28,16 @@ async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promi
     try {
         const url = endpoint ? `${API_BASE_URL}?${endpoint}` : API_BASE_URL;
         console.log('apiRequest', url, options.body || '');
+
+        const headers: HeadersInit = { ...options.headers };
+        // Only add Content-Type for requests with a body
+        if (options.body) {
+            headers['Content-Type'] = 'application/json';
+        }
+
         const response = await fetch(url, {
             ...options,
-            headers: {
-                'Content-Type': 'application/json',
-                ...options.headers,
-            },
+            headers,
         });
 
         if (!response.ok) {

@@ -76,107 +76,69 @@ const Header: React.FC<HeaderProps> = ({ theme, toggleTheme, wallet, navigateTo,
               <div className="hidden md:flex items-center">
                 {isConnected && address ? (
                   <div className="flex items-center space-x-2">
-                    <div className="bg-navy-700/50 rounded-full p-1 flex items-center space-x-2 text-sm">
-                      <span className="text-white pl-3">{balance.toFixed(4)} PHP</span>
-                      <div className="bg-navy-900 text-slate-300 rounded-full px-3 py-1 font-mono">
-                        {`${address.substring(0, 6)}...${address.substring(address.length - 4)}`}
-                      </div>
+                    <div className="px-3 py-1 bg-navy-700 rounded-full text-sm font-mono flex items-center space-x-2">
+                      <span className="text-slate-400">{balance.toFixed(4)} PHP</span>
+                      <span className="text-white bg-navy-900/50 rounded-full px-2 py-0.5">{`${address.substring(0, 6)}...${address.substring(address.length - 4)}`}</span>
                     </div>
-                    <button
-                      onClick={disconnectWallet}
-                      className="p-2 rounded-full text-slate-300 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                      aria-label="Disconnect wallet"
-                    >
-                      <LogOutIcon className="w-5 h-5" />
+                    <button onClick={disconnectWallet} className="p-2 rounded-full text-slate-300 hover:text-white hover:bg-white/10 transition-colors" aria-label="Disconnect wallet">
+                        <LogOutIcon className="w-5 h-5" />
                     </button>
                   </div>
                 ) : (
-                  <button
-                    onClick={onLoginRequest}
-                    className="flex items-center space-x-2 bg-gradient-to-r from-primary-start to-primary-end text-white px-4 py-2 rounded-full text-sm font-semibold hover:shadow-glow-primary transition-shadow"
-                  >
-                    <WalletIcon className="w-4 h-4" />
-                    <span>Login</span>
+                  <button onClick={onLoginRequest} className="flex items-center space-x-2 bg-gradient-to-r from-primary-start to-primary-end text-white px-6 py-2 rounded-full font-semibold hover:shadow-glow-primary transition-shadow">
+                    <WalletIcon className="w-5 h-5" />
+                    <span>Connect Wallet</span>
                   </button>
                 )}
               </div>
-              
               <div className="md:hidden">
-                 <button
-                  onClick={() => setIsMenuOpen(true)}
-                  className="p-2 rounded-full text-slate-300 hover:text-white hover:bg-white/10 transition-colors"
-                  aria-label="Open menu"
-                >
-                  <MenuIcon className="w-6 h-6" />
+                <button onClick={() => setIsMenuOpen(!isMenuOpen)} className="p-2 rounded-full text-slate-300 hover:text-white hover:bg-white/10 transition-colors">
+                    {isMenuOpen ? <XIcon className="w-6 h-6" /> : <MenuIcon className="w-6 h-6" />}
                 </button>
               </div>
             </div>
           </div>
         </div>
       </header>
-
       <AnimatePresence>
         {isMenuOpen && (
           <motion.div
-            className="fixed inset-0 z-[100] bg-navy-900 p-4 flex flex-col md:hidden"
             variants={menuVariants}
             initial="hidden"
             animate="visible"
             exit="exit"
+            className="fixed inset-0 top-16 z-40 bg-navy-900 p-6 md:hidden"
           >
-            <div className="flex items-center justify-between mb-8">
-              <button onClick={() => handleMobileNav('home')} className="flex items-center space-x-2 text-white">
-                <LogoIcon className="h-8 w-8 text-primary-end" />
-                <span className="font-bold text-lg">PHP Coin Domains</span>
-              </button>
-              <button
-                onClick={() => setIsMenuOpen(false)}
-                className="p-2 rounded-full text-slate-300 hover:text-white hover:bg-white/10"
-                aria-label="Close menu"
-              >
-                <XIcon className="w-6 h-6" />
-              </button>
-            </div>
-            <nav className="flex flex-col items-center justify-center flex-grow space-y-8">
-              <button onClick={() => handleMobileNav('home')} className={`text-2xl font-bold transition-colors ${currentPage === 'home' ? 'text-primary-end' : 'text-slate-200 hover:text-primary-end/80'}`}>Search</button>
-              <button onClick={() => handleMobileNav('my-domains')} className={`text-2xl font-bold transition-colors ${currentPage === 'my-domains' ? 'text-primary-end' : 'text-slate-200 hover:text-primary-end/80'}`}>My Domains</button>
-              <button onClick={() => handleMobileNav('explorer')} className={`text-2xl font-bold transition-colors ${currentPage === 'explorer' ? 'text-primary-end' : 'text-slate-200 hover:text-primary-end/80'}`}>Explorer</button>
-              <button onClick={() => handleMobileNav('how-it-works')} className={`text-2xl font-bold transition-colors ${currentPage === 'how-it-works' ? 'text-primary-end' : 'text-slate-200 hover:text-primary-end/80'}`}>How It Works</button>
-            </nav>
-            <div className="py-4">
-              {isConnected && address ? (
-                <div className="flex flex-col items-center space-y-4">
-                  <div className="bg-navy-800 rounded-full p-1 flex items-center space-x-2 text-sm w-full max-w-xs">
-                    <span className="text-white pl-3 flex-1">{balance.toFixed(4)} PHP</span>
-                    <div className="bg-navy-900 text-slate-300 rounded-full px-3 py-1 font-mono">
-                      {`${address.substring(0, 6)}...${address.substring(address.length - 4)}`}
+            <nav className="flex flex-col space-y-4">
+              <NavLink onClick={() => handleMobileNav('home')} isActive={currentPage === 'home'}>Search</NavLink>
+              <NavLink onClick={() => handleMobileNav('my-domains')} isActive={currentPage === 'my-domains'}>My Domains</NavLink>
+              <NavLink onClick={() => handleMobileNav('explorer')} isActive={currentPage === 'explorer'}>Explorer</NavLink>
+              <NavLink onClick={() => handleMobileNav('how-it-works')} isActive={currentPage === 'how-it-works'}>How It Works</NavLink>
+
+              <div className="border-t border-navy-700 pt-4 mt-4">
+                {isConnected && address ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 bg-navy-800 rounded-lg">
+                      <span className="font-medium text-white">Address</span>
+                      <span className="font-mono text-sm text-slate-300">{`${address.substring(0, 8)}...${address.substring(address.length - 6)}`}</span>
                     </div>
+                    <div className="flex items-center justify-between p-3 bg-navy-800 rounded-lg">
+                      <span className="font-medium text-white">Balance</span>
+                      <span className="font-mono text-sm text-slate-300">{balance.toFixed(4)} PHP</span>
+                    </div>
+                    <button onClick={() => { disconnectWallet(); setIsMenuOpen(false); }} className="w-full flex items-center justify-center space-x-2 p-3 rounded-lg font-semibold bg-red-600/20 text-red-400 hover:bg-red-600/30 transition-colors">
+                      <LogOutIcon className="w-5 h-5" />
+                      <span>Disconnect Wallet</span>
+                    </button>
                   </div>
-                  <button
-                    onClick={() => {
-                      disconnectWallet();
-                      setIsMenuOpen(false);
-                    }}
-                    className="flex items-center justify-center space-x-2 w-full max-w-xs p-2 rounded-full text-red-400 bg-red-500/10 hover:bg-red-500/20 transition-colors"
-                    aria-label="Disconnect wallet"
-                  >
-                    <LogOutIcon className="w-5 h-5" />
-                    <span>Disconnect</span>
+                ) : (
+                  <button onClick={() => { onLoginRequest(); setIsMenuOpen(false); }} className="w-full flex items-center justify-center space-x-2 p-3 rounded-lg font-semibold bg-gradient-to-r from-primary-start to-primary-end text-white hover:shadow-glow-primary transition-shadow">
+                    <WalletIcon className="w-5 h-5" />
+                    <span>Connect Wallet</span>
                   </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => {
-                    setIsMenuOpen(false);
-                    onLoginRequest();
-                  }}
-                  className="w-full flex items-center justify-center space-x-2 bg-gradient-to-r from-primary-start to-primary-end text-white px-4 py-3 rounded-full text-base font-semibold hover:shadow-glow-primary transition-shadow"
-                >
-                  <WalletIcon className="w-5 h-5" />
-                  <span>Login</span>
-                </button>
-              )}
-            </div>
+                )}
+              </div>
+            </nav>
           </motion.div>
         )}
       </AnimatePresence>
