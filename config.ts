@@ -8,7 +8,7 @@ export const config = {
    * The base URL for the PHP Coin backend API.
    * Change this value to easily switch between development, staging, or production servers.
    */
-  apiBaseUrl: 'http://localhost:5000/api.php',
+  apiBaseUrl: 'http://phpcoin.net:5000/api.php',
   
 
   /**
@@ -36,5 +36,5 @@ export const config = {
   // },
 
 
-  chainId: '00'
+  chainId: '01'
 };

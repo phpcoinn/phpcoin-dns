@@ -12,7 +12,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "framer-motion": "^12.23.24",
-    "phpcoin-crypto": "latest"
+    "phpcoin-crypto": "https://github.com/phpcoinn/phpcoin-crypto.git"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

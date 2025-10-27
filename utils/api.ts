@@ -112,12 +112,12 @@ export const getTrendingDomainsAPI = (): Promise<ApiResponse<string[]>> => {
 /**
  * Step 1 of domain registration: Prepare the registration and get signable data.
  * @param name The name of the domain to register.
- * @param owner The wallet address of the new owner.
+ * @param publicKey The wallet address of the new owner.
  */
-export const prepareRegisterDomainAPI = (name: string, owner: string): Promise<ApiResponse<TransferData>> => {
+export const prepareRegisterDomainAPI = (name: string, publicKey: string): Promise<ApiResponse<TransferData>> => {
     return apiRequest(`q=prepareRegister`, {
         method: 'POST',
-        body: JSON.stringify({ name, owner }),
+        body: JSON.stringify({ name, publicKey }),
     });
 };
 
@@ -125,7 +125,7 @@ export const prepareRegisterDomainAPI = (name: string, owner: string): Promise<A
  * Step 2 of domain registration: Send the signed data to finalize the transaction.
  * @param payload An object containing the original data, the signature, and the public key.
  */
-export const finalizeRegisterDomainAPI = (payload: { dataToSign: string; finalSignature: string; publicKey: string; }): Promise<ApiResponse<{ transactionId: string }>> => {
+export const finalizeRegisterDomainAPI = (payload: { tx: object }): Promise<ApiResponse<{ transactionId: string }>> => {
     return apiRequest(`q=finalizeRegister`, {
         method: 'POST',
         body: JSON.stringify(payload),

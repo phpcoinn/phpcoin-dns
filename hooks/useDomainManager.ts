@@ -152,21 +152,17 @@ export const useDomainManager = (walletAddress: string | null) => {
         
         try {
             // Step 1: Prepare registration to get data for signing.
-            const prepareResponse = await prepareRegisterDomainAPI(name, walletAddress);
+            const publicKey = phpcoinCrypto.getPublicKey(privateKey);
+            const prepareResponse = await prepareRegisterDomainAPI(name, publicKey);
             if (!prepareResponse.success || !prepareResponse.data) {
                 return { success: false, error: prepareResponse.error || "Failed to prepare domain registration." };
             }
-
             // Step 2: Sign the data and finalize.
-            const publicKey = phpcoinCrypto.getPublicKey(privateKey);
-            const dataToSign = JSON.stringify(prepareResponse.data);
-            const finalSignature = phpcoinCrypto.sign(dataToSign, privateKey);
-
-            const finalizeResponse = await finalizeRegisterDomainAPI({
-                dataToSign,
-                finalSignature,
-                publicKey
-            });
+            const signature_base = prepareResponse.data.signature_base;
+            const finalSignature = phpcoinCrypto.sign(config.chainId + signature_base, privateKey);
+            let tx = prepareResponse.data.tx;
+            tx.signature = finalSignature;
+            const finalizeResponse = await finalizeRegisterDomainAPI({tx});
 
             if (finalizeResponse.success && finalizeResponse.data) {
                  // The domain will appear in the user's list after the background refresh completes
